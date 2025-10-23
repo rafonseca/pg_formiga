@@ -1,0 +1,7 @@
+# pg_formiga extension
+comment = 'Continuous vacuum monitoring via WAL-based heap pruning detection'
+default_version = '1.0'
+module_pathname = '$libdir/pg_formiga'
+relocatable = true
+requires = ''
+trusted = false
