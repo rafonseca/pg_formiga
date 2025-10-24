@@ -13,21 +13,25 @@ CREATE TYPE formiga.prune_reason AS ENUM (
 );
 
 -- Main tracking table for heap pruning events
+-- ONE ROW PER (relation_oid, block_number) - stores latest event
 CREATE TABLE formiga.prune_events (
-    id BIGSERIAL PRIMARY KEY,
     relation_oid OID NOT NULL,
     block_number BIGINT NOT NULL,
     conflict_xid BIGINT,
-    event_timestamp TIMESTAMPTZ DEFAULT NOW(),
+    event_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     wal_lsn PG_LSN NOT NULL,
     prune_reason formiga.prune_reason,
-    CONSTRAINT valid_block_number CHECK (block_number >= 0)
+    
+    -- Constraints
+    PRIMARY KEY (relation_oid, block_number)
 );
 
--- Indexes for efficient querying
-CREATE INDEX idx_prune_events_relation_block 
-    ON formiga.prune_events (relation_oid, block_number);
-CREATE INDEX idx_prune_events_timestamp 
-    ON formiga.prune_events (event_timestamp);
+-- Indexes optimized for timestamp ordering and common queries
+CREATE INDEX idx_prune_events_timestamp_desc 
+    ON formiga.prune_events (event_timestamp DESC);
+
+CREATE INDEX idx_prune_events_relation_timestamp 
+    ON formiga.prune_events (relation_oid, event_timestamp DESC);
+
 CREATE INDEX idx_prune_events_wal_lsn 
     ON formiga.prune_events (wal_lsn);

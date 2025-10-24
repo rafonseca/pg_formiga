@@ -66,6 +66,7 @@ prune_reason_to_string(uint8 info)
 }
 
 
+
 /*
  * Signal handlers for background worker
  */
@@ -239,14 +240,19 @@ parse_heap2_prune_record(XLogReaderState *xlogreader, XLogRecord *record, uint8 
         /* Push active snapshot for MVCC */
         PushActiveSnapshot(GetTransactionSnapshot());
         
-        /* Insert record into formiga.prune_events table */
+        /* UPSERT record into formiga.prune_events table */
         initStringInfo(&query);
         if (conflict_xid != InvalidTransactionId)
         {
             appendStringInfo(&query,
                 "INSERT INTO formiga.prune_events "
-                "(relation_oid, block_number, conflict_xid, wal_lsn, prune_reason) "
-                "VALUES (%u, %u, %u, '%X/%X', '%s')",
+                "(relation_oid, block_number, conflict_xid, event_timestamp, wal_lsn, prune_reason) "
+                "VALUES (%u, %u, %u, NOW(), '%X/%X', '%s') "
+                "ON CONFLICT (relation_oid, block_number) DO UPDATE SET "
+                "conflict_xid = EXCLUDED.conflict_xid, "
+                "event_timestamp = EXCLUDED.event_timestamp, "
+                "wal_lsn = EXCLUDED.wal_lsn, "
+                "prune_reason = EXCLUDED.prune_reason",
                 rlocator.relNumber,
                 blkno,
                 conflict_xid,
@@ -257,8 +263,13 @@ parse_heap2_prune_record(XLogReaderState *xlogreader, XLogRecord *record, uint8 
         {
             appendStringInfo(&query,
                 "INSERT INTO formiga.prune_events "
-                "(relation_oid, block_number, conflict_xid, wal_lsn, prune_reason) "
-                "VALUES (%u, %u, NULL, '%X/%X', '%s')",
+                "(relation_oid, block_number, conflict_xid, event_timestamp, wal_lsn, prune_reason) "
+                "VALUES (%u, %u, NULL, NOW(), '%X/%X', '%s') "
+                "ON CONFLICT (relation_oid, block_number) DO UPDATE SET "
+                "conflict_xid = EXCLUDED.conflict_xid, "
+                "event_timestamp = EXCLUDED.event_timestamp, "
+                "wal_lsn = EXCLUDED.wal_lsn, "
+                "prune_reason = EXCLUDED.prune_reason",
                 rlocator.relNumber,
                 blkno,
                 LSN_FORMAT_ARGS(xlogreader->ReadRecPtr),
