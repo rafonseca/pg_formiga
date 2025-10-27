@@ -158,6 +158,8 @@
 #include "utils/pg_rusage.h"
 #include "utils/timestamp.h"
 
+/* Hook for overriding vacuum block selection callback */
+heap_vac_scan_callback_hook_type heap_vac_scan_callback_hook = NULL;
 
 /*
  * Space/time tradeoff parameters: do these need to be user-tunable?
@@ -1200,6 +1202,7 @@ static void
 lazy_scan_heap(LVRelState *vacrel)
 {
 	ReadStream *stream;
+	ReadStreamBlockNumberCB callback_func;
 	BlockNumber rel_pages = vacrel->rel_pages,
 				blkno = 0,
 				next_fsm_block_to_vacuum = 0;
@@ -1232,11 +1235,16 @@ lazy_scan_heap(LVRelState *vacrel)
 	 * This could be made safe for READ_STREAM_USE_BATCHING, but only with
 	 * explicit work in heap_vac_scan_next_block.
 	 */
+	/* Choose callback function - use hook if available */
+	callback_func = heap_vac_scan_callback_hook ? 
+					heap_vac_scan_callback_hook : 
+					heap_vac_scan_next_block;
+	
 	stream = read_stream_begin_relation(READ_STREAM_MAINTENANCE,
 										vacrel->bstrategy,
 										vacrel->rel,
 										MAIN_FORKNUM,
-										heap_vac_scan_next_block,
+										callback_func,
 										vacrel,
 										sizeof(uint8));
 
